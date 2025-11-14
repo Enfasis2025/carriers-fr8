@@ -201,14 +201,15 @@ def main():
             if row['COMPANY TYPE'] == 'CARRIER':
                 carriers.append(row)
 
-    print(f"Total de carriers encontrados: {len(carriers)}")
+    print(f"Total de registros de carriers encontrados: {len(carriers)}")
 
     # Analizar cada ruta
     resultados = defaultdict(list)
 
     for ruta_nombre, ruta_info in RUTAS.items():
         print(f"\nAnalizando {ruta_nombre}...")
-        carriers_en_ruta = set()
+        carriers_unicos = set()
+        registros_agregados = 0
 
         origen = ruta_info['origen']
         destino = ruta_info['destino']
@@ -219,6 +220,7 @@ def main():
             en_destino = carrier_matches_location(carrier, destino)
 
             if en_origen or en_destino:
+                # Contar carriers únicos para el resumen
                 carrier_key = (
                     carrier['BAN'],
                     carrier['COMPANY NAME'],
@@ -226,31 +228,32 @@ def main():
                     normalize_state(carrier.get('STATE', '')),
                     carrier.get('COUNTRY', '')
                 )
+                carriers_unicos.add(carrier_key)
 
-                if carrier_key not in carriers_en_ruta:
-                    carriers_en_ruta.add(carrier_key)
+                # Agregar TODOS los registros del carrier (incluyendo diferentes emails)
+                ubicacion = "ORIGEN" if en_origen else ""
+                ubicacion += " y " if (en_origen and en_destino) else ""
+                ubicacion += "DESTINO" if en_destino else ""
 
-                    ubicacion = "ORIGEN" if en_origen else ""
-                    ubicacion += " y " if (en_origen and en_destino) else ""
-                    ubicacion += "DESTINO" if en_destino else ""
+                resultados[ruta_nombre].append({
+                    'RUTA': ruta_nombre,
+                    'DESCRIPCION_RUTA': ruta_info['descripcion'],
+                    'TIPO_RUTA': ruta_info['tipo'],
+                    'BAN': carrier['BAN'],
+                    'CARRIER': carrier['COMPANY NAME'],
+                    'CITY': carrier.get('CITY', ''),
+                    'STATE': carrier.get('STATE', ''),
+                    'STATE_NORMALIZADO': normalize_state(carrier.get('STATE', '')),
+                    'COUNTRY': carrier.get('COUNTRY', ''),
+                    'UBICACION_EN_RUTA': ubicacion,
+                    'EMAIL': carrier.get('EMAIL', ''),
+                    'PHONE': carrier.get('PHONE #', ''),
+                    'DATA_ORIGIN': carrier.get('DATA ORIGIN', '')
+                })
+                registros_agregados += 1
 
-                    resultados[ruta_nombre].append({
-                        'RUTA': ruta_nombre,
-                        'DESCRIPCION_RUTA': ruta_info['descripcion'],
-                        'TIPO_RUTA': ruta_info['tipo'],
-                        'BAN': carrier['BAN'],
-                        'CARRIER': carrier['COMPANY NAME'],
-                        'CITY': carrier.get('CITY', ''),
-                        'STATE': carrier.get('STATE', ''),
-                        'STATE_NORMALIZADO': normalize_state(carrier.get('STATE', '')),
-                        'COUNTRY': carrier.get('COUNTRY', ''),
-                        'UBICACION_EN_RUTA': ubicacion,
-                        'EMAIL': carrier.get('EMAIL', ''),
-                        'PHONE': carrier.get('PHONE #', ''),
-                        'DATA_ORIGIN': carrier.get('DATA ORIGIN', '')
-                    })
-
-        print(f"  Carriers encontrados: {len(carriers_en_ruta)}")
+        print(f"  Carriers únicos: {len(carriers_unicos)}")
+        print(f"  Registros totales (inc. múltiples contactos): {registros_agregados}")
 
     # Generar archivo de salida
     print("\nGenerando archivo carriers_12_rutas.csv...")
@@ -272,13 +275,19 @@ def main():
             writer.writeheader()
             writer.writerows(output_rows)
 
-        print(f"✓ Archivo generado con {len(output_rows)} coincidencias")
+        print(f"✓ Archivo generado con {len(output_rows)} registros totales")
 
         # Resumen por ruta
         print("\n=== RESUMEN POR RUTA ===")
+        print("(Incluye múltiples contactos por carrier cuando están disponibles)\n")
         for ruta in sorted(resultados.keys()):
-            count = len(resultados[ruta])
-            print(f"{ruta}: {count} carriers")
+            registros = len(resultados[ruta])
+            # Contar carriers únicos
+            carriers_unicos = set()
+            for r in resultados[ruta]:
+                key = (r['BAN'], r['CARRIER'], r['CITY'], r['STATE_NORMALIZADO'], r['COUNTRY'])
+                carriers_unicos.add(key)
+            print(f"{ruta}: {len(carriers_unicos)} carriers únicos, {registros} registros totales")
     else:
         print("No se encontraron coincidencias")
 
